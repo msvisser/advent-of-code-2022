@@ -5,13 +5,13 @@ fn move_tail(head_x: isize, head_y: isize, tail_x: isize, tail_y: isize) -> (isi
     let diff_tail_x: isize = head_x - tail_x;
     let diff_tail_y: isize = head_y - tail_y;
 
-    if (diff_tail_x == -2 && diff_tail_y == -1) || (diff_tail_x == -1 && diff_tail_y == -2) {
+    if (diff_tail_x == -2 && diff_tail_y == -1) || (diff_tail_x == -1 && diff_tail_y == -2) || (diff_tail_x == -2 && diff_tail_y == -2) {
         return (tail_x - 1, tail_y - 1);
-    } else if (diff_tail_x == 2 && diff_tail_y == -1) || (diff_tail_x == 1 && diff_tail_y == -2) {
+    } else if (diff_tail_x == 2 && diff_tail_y == -1) || (diff_tail_x == 1 && diff_tail_y == -2) || (diff_tail_x == 2 && diff_tail_y == -2) {
         return (tail_x + 1, tail_y - 1);
-    } else if (diff_tail_x == -2 && diff_tail_y == 1) || (diff_tail_x == -1 && diff_tail_y == 2) {
+    } else if (diff_tail_x == -2 && diff_tail_y == 1) || (diff_tail_x == -1 && diff_tail_y == 2) || (diff_tail_x == -2 && diff_tail_y == 2) {
         return (tail_x - 1, tail_y + 1);
-    } else if (diff_tail_x == 2 && diff_tail_y == 1) || (diff_tail_x == 1 && diff_tail_y == 2)  {
+    } else if (diff_tail_x == 2 && diff_tail_y == 1) || (diff_tail_x == 1 && diff_tail_y == 2) || (diff_tail_x == 2 && diff_tail_y == 2) {
         return (tail_x + 1, tail_y + 1);
     } else if diff_tail_x == -2 && diff_tail_y == 0 {
         return (tail_x - 1, tail_y);
@@ -77,11 +77,9 @@ fn main() {
     let mut head_y: isize = 0;
     let mut tails_x: [isize; 9] = [0; 9];
     let mut tails_y: [isize; 9] = [0; 9];
-    let mut new_tails: [(isize, isize); 9] = [(0, 0); 9];
 
     let mut set = HashSet::new();
     for line in input.lines() {
-        println!("{}", line);
         let mut parts = line.split(" ");
         let direction = parts.next().unwrap();
         let count = parts.next().unwrap().parse::<usize>().unwrap();
@@ -99,17 +97,10 @@ fn main() {
                 head_y += 1;
             }
 
-            new_tails[0] = move_tail(head_x, head_y, tails_x[0], tails_y[0]);
+            (tails_x[0], tails_y[0]) = move_tail(head_x, head_y, tails_x[0], tails_y[0]);
             for i in 0..8 {
-                new_tails[i+1] = move_tail(tails_x[i], tails_y[i], tails_x[i+1], tails_y[i+1]);
+                (tails_x[i+1], tails_y[i+1]) = move_tail(tails_x[i], tails_y[i], tails_x[i+1], tails_y[i+1]);
             }
-
-            for i in 0..9 {
-                tails_x[i] = new_tails[i].0;
-                tails_y[i] = new_tails[i].1;
-            }
-
-            println!("({} {}) ({} {}) ({} {}) ({} {}) ({} {}) ({} {}) ({} {}) ({} {}) ({} {}) ({} {})", head_x, head_y, tails_x[0], tails_y[0], tails_x[1], tails_y[1], tails_x[2], tails_y[2], tails_x[3], tails_y[3], tails_x[4], tails_y[4], tails_x[5], tails_y[5], tails_x[6], tails_y[6], tails_x[7], tails_y[7], tails_x[8], tails_y[8], );
         }
         set.insert((tails_x[8], tails_y[8]));
     }
