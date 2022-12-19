@@ -1,7 +1,7 @@
-#![feature(int_roundings)]
-
 use aocf::Aoc;
 use regex::Regex;
+use std::collections::{VecDeque, HashMap};
+use rayon::prelude::*;
 
 #[derive(Debug)]
 struct Blueprint {
@@ -14,7 +14,7 @@ struct Blueprint {
     geode_robot_obsidian_cost: usize,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 struct State {
     ore_robots: usize,
     clay_robots: usize,
@@ -25,17 +25,28 @@ struct State {
     clay: usize,
     obsidian: usize,
     geode: usize,
-
-    minutes: usize,
 }
 
 impl State {
-    fn wait_minutes(&mut self, minutes: usize) {
-        self.ore += self.ore_robots * minutes;
-        self.clay += self.clay_robots * minutes;
-        self.obsidian += self.obsidian_robots * minutes;
-        self.geode += self.geode_robots * minutes;
-        self.minutes -= minutes;
+    fn update_resources(&mut self) {
+        self.ore += self.ore_robots;
+        self.clay += self.clay_robots;
+        self.obsidian += self.obsidian_robots;
+        self.geode += self.geode_robots;
+    }
+
+    fn new() -> State {
+        State {
+            ore_robots: 1,
+            clay_robots: 0,
+            obsidian_robots: 0,
+            geode_robots: 0,
+
+            ore: 0,
+            clay: 0,
+            obsidian: 0,
+            geode: 0,
+        }
     }
 }
 
@@ -47,8 +58,10 @@ fn main() {
         .unwrap();
 
     // Get input data (don't force)
-    // let input = aoc.get_input(false).unwrap();
-    let input = "Blueprint 1: Each ore robot costs 4 ore. Each clay robot costs 2 ore. Each obsidian robot costs 3 ore and 14 clay. Each geode robot costs 2 ore and 7 obsidian.";
+    let input = aoc.get_input(false).unwrap();
+    // let input = "Blueprint 1: Each ore robot costs 4 ore. Each clay robot costs 2 ore. Each obsidian robot costs 3 ore and 14 clay. Each geode robot costs 2 ore and 7 obsidian.\nBlueprint 2: Each ore robot costs 2 ore. Each clay robot costs 3 ore. Each obsidian robot costs 3 ore and 8 clay. Each geode robot costs 3 ore and 12 obsidian.";
+
+    let mut blueprints = Vec::new();
 
     let regex = Regex::new(r"Blueprint (\d+): Each ore robot costs (\d+) ore\. Each clay robot costs (\d+) ore\. Each obsidian robot costs (\d+) ore and (\d+) clay\. Each geode robot costs (\d+) ore and (\d+) obsidian\.").unwrap();
     for line in input.lines() {
@@ -63,88 +76,99 @@ fn main() {
             geode_robot_obsidian_cost: captures[7].parse().unwrap(),
         };
 
-        println!("{:?}", blueprint);
-
-        let state = State {
-            ore_robots: 1,
-            clay_robots: 0,
-            obsidian_robots: 0,
-            geode_robots: 0,
-
-            ore: 0,
-            clay: 0,
-            obsidian: 0,
-            geode: 0,
-
-            minutes: 24,
-        };
-
-        let result = search(state, &blueprint);
-        println!("{}", result);
+        blueprints.push(blueprint);
     }
+
+    let total: usize = blueprints.par_iter().map(|b| b.id * search(24, b)).sum();
+    println!("{}", total);
+
+    let total2: usize = blueprints.par_iter().take(3).map(|b| search(32, b)).product();
+    println!("{}", total2);
 }
 
-fn search(state: State, blueprint: &Blueprint) -> usize {
+fn search(minutes: usize, blueprint: &Blueprint) -> usize {
+    let mut queue = VecDeque::new();
+    queue.push_back((State::new(), minutes));
+
+    let mut cache = HashMap::new();
+
     let mut max_geodes = 0;
 
-    if state.ore_robots > 0 {
-        let minutes_until_ore_robot = (blueprint.ore_robot_ore_cost.saturating_sub(state.ore)).div_ceil(state.ore_robots);
-        if state.minutes >= minutes_until_ore_robot + 1 {
-            let mut sub_state = state;
-            sub_state.wait_minutes(minutes_until_ore_robot + 1);
-            sub_state.ore -= blueprint.ore_robot_ore_cost;
-            sub_state.ore_robots += 1;
-            max_geodes = max_geodes.max(search(sub_state, blueprint));
+    let max_ore_robots = blueprint.ore_robot_ore_cost.max(blueprint.clay_robot_ore_cost).max(blueprint.obsidian_robot_ore_cost).max(blueprint.geode_robot_ore_cost);
+    let max_clay_robots = blueprint.obsidian_robot_clay_cost;
+    let max_obsidian_robots = blueprint.geode_robot_obsidian_cost;
+
+    while let Some((mut current_state, current_minutes)) = queue.pop_front() {
+        current_state.ore = current_state.ore.min(current_minutes * max_ore_robots);
+        current_state.clay = current_state.clay.min(current_minutes * max_clay_robots);
+        current_state.obsidian = current_state.obsidian.min(current_minutes * max_obsidian_robots);
+
+        if let Some(&cache_minutes) = cache.get(&current_state) {
+            if cache_minutes >= current_minutes {
+                continue;
+            }
         }
 
-        let minutes_until_clay_robot = (blueprint.clay_robot_ore_cost.saturating_sub(state.ore)).div_ceil(state.ore_robots);
-        if state.minutes >= minutes_until_clay_robot + 1 {
-            let mut sub_state = state;
-            sub_state.wait_minutes(minutes_until_clay_robot + 1);
-            sub_state.ore -= blueprint.clay_robot_ore_cost;
-            sub_state.clay_robots += 1;
-            max_geodes = max_geodes.max(search(sub_state, blueprint));
+        if current_minutes == 0 {
+            max_geodes = max_geodes.max(current_state.geode);
+            continue;
         }
-    }
 
-    if state.ore_robots > 0 && state.clay_robots > 0 {
-        let minutes_until_obsidian_robot_ore = (blueprint.obsidian_robot_ore_cost.saturating_sub(state.ore)).div_ceil(state.ore_robots);
-        let minutes_until_obsidian_robot_clay = (blueprint.obsidian_robot_clay_cost.saturating_sub(state.clay)).div_ceil(state.clay_robots);
-        let minutes_until_obsidian_robot = minutes_until_obsidian_robot_ore.max(minutes_until_obsidian_robot_clay);
-        if state.minutes >= minutes_until_obsidian_robot + 1 {
-            let mut sub_state = state;
-            sub_state.wait_minutes(minutes_until_obsidian_robot);
-            sub_state.ore -= blueprint.obsidian_robot_ore_cost;
-            sub_state.clay -= blueprint.obsidian_robot_clay_cost;
-            sub_state.obsidian_robots += 1;
-            max_geodes = max_geodes.max(search(sub_state, blueprint));
+        let can_make_geode_robot = current_state.ore >= blueprint.geode_robot_ore_cost && current_state.obsidian >= blueprint.geode_robot_obsidian_cost;
+        let can_make_ore_robot = current_state.ore >= blueprint.ore_robot_ore_cost;
+        let can_make_clay_robot = current_state.ore >= blueprint.clay_robot_ore_cost;
+        let can_make_obsidian_robot = current_state.ore >= blueprint.obsidian_robot_ore_cost && current_state.clay >= blueprint.obsidian_robot_clay_cost;
+
+        if can_make_geode_robot {
+            let mut new_state = current_state;
+
+            new_state.ore -= blueprint.geode_robot_ore_cost;
+            new_state.obsidian -= blueprint.geode_robot_obsidian_cost;
+            new_state.update_resources();
+            new_state.geode_robots += 1;
+
+            queue.push_back((new_state, current_minutes - 1));
+            continue;
         }
-    }
 
-    if state.ore_robots > 0 && state.obsidian_robots > 0 {
-        let minutes_until_geode_robot_ore = (blueprint.geode_robot_ore_cost.saturating_sub(state.ore)).div_ceil(state.ore_robots);
-        let minutes_until_geode_robot_obsidian = (blueprint.geode_robot_obsidian_cost.saturating_sub(state.obsidian)).div_ceil(state.obsidian_robots);
-        let minutes_until_geode_robot = minutes_until_geode_robot_ore.max(minutes_until_geode_robot_obsidian);
-        if state.minutes >= minutes_until_geode_robot + 1 {
-            let mut sub_state = state;
-            sub_state.wait_minutes(minutes_until_geode_robot + 1);
-            sub_state.ore -= blueprint.geode_robot_ore_cost;
-            sub_state.obsidian -= blueprint.geode_robot_obsidian_cost;
-            sub_state.geode_robots += 1;
-            max_geodes = max_geodes.max(search(sub_state, blueprint));
+        if can_make_ore_robot && current_state.ore_robots < max_ore_robots {
+            let mut new_state = current_state;
+
+            new_state.ore -= blueprint.ore_robot_ore_cost;
+            new_state.update_resources();
+            new_state.ore_robots += 1;
+
+            queue.push_back((new_state, current_minutes - 1));
         }
-    }
 
-    if state.minutes > 0 {
-        let mut sub_state = state;
-        sub_state.ore += sub_state.ore_robots;
-        sub_state.clay += sub_state.clay_robots;
-        sub_state.obsidian += sub_state.obsidian_robots;
-        sub_state.geode += sub_state.geode_robots;
-        sub_state.minutes -= 1;
-        max_geodes = max_geodes.max(search(sub_state, blueprint));
-    } else {
-        max_geodes = max_geodes.max(state.geode);
+        if can_make_clay_robot && current_state.clay_robots < max_clay_robots {
+            let mut new_state = current_state;
+
+            new_state.ore -= blueprint.clay_robot_ore_cost;
+            new_state.update_resources();
+            new_state.clay_robots += 1;
+
+            queue.push_back((new_state, current_minutes - 1));
+        }
+
+        if can_make_obsidian_robot && current_state.obsidian_robots < max_obsidian_robots {
+            let mut new_state = current_state;
+
+            new_state.ore -= blueprint.obsidian_robot_ore_cost;
+            new_state.clay -= blueprint.obsidian_robot_clay_cost;
+            new_state.update_resources();
+            new_state.obsidian_robots += 1;
+
+            queue.push_back((new_state, current_minutes - 1));
+        }
+
+        {
+            let mut new_state = current_state;
+            new_state.update_resources();
+            queue.push_back((new_state, current_minutes - 1));
+        }
+
+        cache.insert(current_state, current_minutes);
     }
 
     max_geodes

@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 aocf = "0.1.18"
+rayon = "1.6.1"
 regex = "1.7.0"
