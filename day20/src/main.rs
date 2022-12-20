@@ -2,21 +2,13 @@ use aocf::Aoc;
 
 fn mix(numbers: &[isize], index_list: &mut Vec<usize>) {
     for i in 0..numbers.len() {
-        let offset = numbers[i];
+        let offset = numbers[i].rem_euclid(numbers.len() as isize - 1);
         let pos = index_list.iter().position(|&v| v == i).unwrap() as isize;
 
-        if offset > 0 {
-            for m in 0..(offset % (numbers.len() as isize - 1)) {
-                let from = (pos + m) % numbers.len() as isize;
-                let to = (pos + m + 1) % numbers.len() as isize;
-                index_list.swap(from as usize, to as usize);
-            }
-        } else {
-            for m in 0..(offset.abs() % (numbers.len() as isize - 1)) {
-                let from = (pos - m).rem_euclid(numbers.len() as isize);
-                let to = (pos - m - 1).rem_euclid(numbers.len() as isize);
-                index_list.swap(from as usize, to as usize);
-            }
+        for m in 0..offset {
+            let from = (pos + m) % numbers.len() as isize;
+            let to = (pos + m + 1) % numbers.len() as isize;
+            index_list.swap(from as usize, to as usize);
         }
     }
 }
